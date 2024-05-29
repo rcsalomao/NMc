@@ -12,7 +12,7 @@ def calcula_area_aco_conjunto(tupla_n_diametro_i: List[Tuple[int, float]]):
     return sum([n * math.pi * d**2 / 4 for n, d in tupla_n_diametro_i])
 
 
-@jit(nopython=True, cache=True)
+@jit(nopython=True)
 def calcula_sigma_c_classe_I(fck, epsilon, beta):
     """
     fck: Tensão característica do concreto. (kN/cm²).
@@ -27,7 +27,7 @@ def calcula_sigma_c_classe_I(fck, epsilon, beta):
         return beta * fcd
 
 
-@jit(nopython=True, cache=True)
+@jit(nopython=True)
 def calcula_epsilon_c2_classeII(fck):
     """
     fck: Tensão característica do concreto. (kN/cm²).
@@ -36,7 +36,7 @@ def calcula_epsilon_c2_classeII(fck):
     return 2 / 1000.0 + (0.085 / 1000.0) * ((fck_MPa - 50.0) ** 0.53)
 
 
-@jit(nopython=True, cache=True)
+@jit(nopython=True)
 def calcula_epsilon_cu_classeII(fck):
     """
     fck: Tensão característica do concreto. (kN/cm²).
@@ -45,7 +45,7 @@ def calcula_epsilon_cu_classeII(fck):
     return 2.6 / 1000.0 + (35.0 / 1000.0) * ((90.0 - fck_MPa) / 100.0) ** 4
 
 
-@jit(nopython=True, cache=True)
+@jit(nopython=True)
 def calcula_sigma_c_classe_II(fck, epsilon, beta):
     """
     fck: Tensão característica do concreto. (kN/cm²).
@@ -61,6 +61,7 @@ def calcula_sigma_c_classe_II(fck, epsilon, beta):
         return beta * fcd
 
 
+@jit(nopython=True)
 def calcula_epsilon_c2(fck):
     """
     fck: Tensão característica do concreto. (kN/cm²).
@@ -71,6 +72,7 @@ def calcula_epsilon_c2(fck):
         return calcula_epsilon_c2_classeII(fck)
 
 
+@jit(nopython=True)
 def calcula_epsilon_cu(fck):
     """
     fck: Tensão característica do concreto. (kN/cm²).
@@ -81,7 +83,7 @@ def calcula_epsilon_cu(fck):
         return calcula_epsilon_cu_classeII(fck)
 
 
-@jit(nopython=True, cache=True)
+@jit(nopython=True)
 def calcula_sigma_c(fck, epsilon, beta):
     """
     fck: Tensão característica do concreto. (kN/cm²).
@@ -93,7 +95,7 @@ def calcula_sigma_c(fck, epsilon, beta):
         return calcula_sigma_c_classe_II(fck, epsilon, beta)
 
 
-@jit(nopython=True, cache=True)
+@jit(nopython=True)
 def calcula_largura(x, b_i, h_i):
     for i in range(len(b_i)):
         if h_i[i] > x:
@@ -106,7 +108,6 @@ def calcula_largura(x, b_i, h_i):
 @jit(
     "(float64, float64[:], float64[:], float64, float64, float64, int64)",
     nopython=True,
-    cache=True,
 )
 def calcula_centroide_Normal_concreto(fck, b_i, h_i, curvatura, x, beta, n_xi):
     """
@@ -128,10 +129,12 @@ def calcula_centroide_Normal_concreto(fck, b_i, h_i, curvatura, x, beta, n_xi):
     return (N_cd, centroide_N_cd)
 
 
+@jit(nopython=True)
 def calcula_epsilon_s(d, curvatura, x):
     return curvatura * (x - d)
 
 
+@jit(nopython=True)
 def calcula_sigma_aco(fy, epsilon_s):
     """
     fy: Tensão de escoamento do aço. (kN/cm²)
@@ -141,6 +144,7 @@ def calcula_sigma_aco(fy, epsilon_s):
     return max(min(E_s * epsilon_s, fyd), -fyd)
 
 
+@jit(nopython=True)
 def calcula_Normal_resultante(
     fck, b_i, h_i, Asi, di, curvatura, x, beta, N_sd, fy, n_xi
 ):
@@ -155,14 +159,17 @@ def calcula_Normal_resultante(
     return N_cd + Rs - N_sd
 
 
+@jit(nopython=True)
 def calcula_area_trapezio(h, a, b):
     return h * (a + b) / 2.0
 
 
+@jit(nopython=True)
 def calcula_centroide_trapezio(h, a, b):
     return h * ((b + 2 * a) / (3 * (a + b)))
 
 
+@jit(nopython=True)
 def calcula_centroide_b_i_h_i(b_i, h_i):
     area_total = 0.0
     area_i_cg_i = 0.0
@@ -177,6 +184,7 @@ def calcula_centroide_b_i_h_i(b_i, h_i):
     return area_i_cg_i / area_total
 
 
+@jit(nopython=True)
 def calcula_Momento_resultante(
     fck, b_i, h_i, Asi, di, curvatura, x, beta, M_sd, fy, n_xi
 ):
@@ -408,6 +416,7 @@ def calcula_historico_momento_curvatura(
     return (np.array(historico_curvatura), np.array(historico_M_rd))
 
 
+@jit(nopython=True)
 def interpola_sequencia_x(x, y, y_alvo):
     if y_alvo <= y[0]:
         return x[0]
