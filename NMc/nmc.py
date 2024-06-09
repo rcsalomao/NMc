@@ -267,8 +267,7 @@ def calcula_linha_neutra(
                 N_x_min = N_x_med
         i += 1
         if i > max_iter:
-            print("Número máximo de iterações alcançado :c")
-            exit(2)
+            raise RuntimeError("Número máximo de iterações alcançado :c")
     return x_med
 
 
