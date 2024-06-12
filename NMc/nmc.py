@@ -12,56 +12,6 @@ def calcula_area_aco_conjunto(tupla_n_diametro_i: List[Tuple[int, float]]):
     return sum([n * math.pi * d**2 / 4 for n, d in tupla_n_diametro_i])
 
 
-@jit(nopython=True)
-def calcula_sigma_c_classe_I(fck, epsilon, beta):
-    """
-    fck: Tensão característica do concreto. (kN/cm²).
-    beta: Coeficiente relacionado à ELU ou gamma_f3. (0.85 para ELU ou 1.1 caso contrário).
-    """
-    fcd = fck / 1.4
-    epsilon_c2 = 2.0 / 1000.0
-    n = 2
-    if epsilon <= epsilon_c2:
-        return beta * fcd * (1 - (1 - epsilon / epsilon_c2) ** n)
-    else:
-        return beta * fcd
-
-
-@jit(nopython=True)
-def calcula_epsilon_c2_classeII(fck):
-    """
-    fck: Tensão característica do concreto. (kN/cm²).
-    """
-    fck_MPa = fck * 10.0
-    return 2 / 1000.0 + (0.085 / 1000.0) * ((fck_MPa - 50.0) ** 0.53)
-
-
-@jit(nopython=True)
-def calcula_epsilon_cu_classeII(fck):
-    """
-    fck: Tensão característica do concreto. (kN/cm²).
-    """
-    fck_MPa = fck * 10.0
-    return 2.6 / 1000.0 + (35.0 / 1000.0) * ((90.0 - fck_MPa) / 100.0) ** 4
-
-
-@jit(nopython=True)
-def calcula_sigma_c_classe_II(fck, epsilon, beta):
-    """
-    fck: Tensão característica do concreto. (kN/cm²).
-    beta: Coeficiente relacionado à ELU ou gamma_f3. (0.85 para ELU ou 1.1 caso contrário).
-    """
-    fcd = fck / 1.4
-    fck_MPa = fck * 10.0
-    epsilon_c2 = calcula_epsilon_c2_classeII(fck)
-    n = 1.4 + 23.4 * (((90.0 - fck_MPa) / 100.0) ** 4)
-    if epsilon <= epsilon_c2:
-        return beta * fcd * (1 - (1 - epsilon / epsilon_c2) ** n)
-    else:
-        return beta * fcd
-
-
-@jit(nopython=True)
 def calcula_epsilon_c2(fck):
     """
     fck: Tensão característica do concreto. (kN/cm²).
@@ -69,10 +19,10 @@ def calcula_epsilon_c2(fck):
     if fck <= 5.0:
         return 2.0 / 1000.0
     else:
-        return calcula_epsilon_c2_classeII(fck)
+        fck_MPa = fck * 10.0
+        return 2 / 1000.0 + (0.085 / 1000.0) * ((fck_MPa - 50.0) ** 0.53)
 
 
-@jit(nopython=True)
 def calcula_epsilon_cu(fck):
     """
     fck: Tensão característica do concreto. (kN/cm²).
@@ -80,19 +30,42 @@ def calcula_epsilon_cu(fck):
     if fck <= 5.0:
         return 3.5 / 1000.0
     else:
-        return calcula_epsilon_cu_classeII(fck)
+        fck_MPa = fck * 10.0
+        return 2.6 / 1000.0 + (35.0 / 1000.0) * ((90.0 - fck_MPa) / 100.0) ** 4
+
+
+def calcula_expoente_n(fck):
+    """fck: Tensão característica do concreto (kN/cm²)"""
+    if fck <= 5.0:
+        return 2
+    else:
+        fck_MPa = fck * 10.0
+        return 1.4 + 23.4 * (((90.0 - fck_MPa) / 100.0) ** 4)
+
+
+def calcula_coef_fragilidade(fck):
+    """fck: Tensão característica do concreto (kN/cm²)"""
+    if fck <= 4.0:
+        return 1
+    else:
+        fck_MPa = fck * 10.0
+        return (40 / fck_MPa) ** (1 / 3)
 
 
 @jit(nopython=True)
-def calcula_sigma_c(fck, epsilon, beta):
+def calcula_sigma_c(fck, epsilon, epsilon_c2, exponente_n, coef_fragilidade, beta):
     """
     fck: Tensão característica do concreto. (kN/cm²).
+    epsilon: Deformação do concreto à qual deseja-se saber o nível de tensão.
+    epsilon_c2: Deformação c2 do concreto.
     beta: Coeficiente relacionado à ELU ou gamma_f3. (0.85 para ELU ou 1.1 caso contrário).
     """
-    if fck <= 5.0:
-        return calcula_sigma_c_classe_I(fck, epsilon, beta)
+    n = exponente_n
+    fcd = fck / 1.4
+    if epsilon <= epsilon_c2:
+        return beta * coef_fragilidade * fcd * (1 - (1 - epsilon / epsilon_c2) ** n)
     else:
-        return calcula_sigma_c_classe_II(fck, epsilon, beta)
+        return beta * coef_fragilidade * fcd
 
 
 @jit(nopython=True)
@@ -106,10 +79,12 @@ def calcula_largura(x, b_i, h_i):
 
 
 @jit(
-    "(float64, float64[:], float64[:], float64, float64, float64, int64)",
+    "(float64, float64, float64, float64, float64[:], float64[:], float64, float64, float64, int64)",
     nopython=True,
 )
-def calcula_centroide_Normal_concreto(fck, b_i, h_i, curvatura, x, beta, n_xi):
+def calcula_centroide_Normal_concreto(
+    fck, epsilon_c2, exponente_n, coef_fragilidade, b_i, h_i, curvatura, x, beta, n_xi
+):
     """
     fck: Tensão característica do concreto. (kN/cm²).
     beta: Coeficiente relacionado à ELU ou gamma_f3. (0.85 para ELU ou 1.1 caso contrário).
@@ -120,7 +95,9 @@ def calcula_centroide_Normal_concreto(fck, b_i, h_i, curvatura, x, beta, n_xi):
     for i in range(n_xi):
         x_i_medio = dx * i + dx / 2.0
         epsilon_i_medio = (x - x_i_medio) * curvatura
-        sigma_i_medio = calcula_sigma_c(fck, epsilon_i_medio, beta)
+        sigma_i_medio = calcula_sigma_c(
+            fck, epsilon_i_medio, epsilon_c2, exponente_n, coef_fragilidade, beta
+        )
         N_i = calcula_largura(x_i_medio, b_i, h_i) * dx * sigma_i_medio
         N_cd += N_i
         Na_cd += N_i * (x - x_i_medio)
@@ -146,7 +123,20 @@ def calcula_sigma_aco(fy, epsilon_s):
 
 @jit(nopython=True)
 def calcula_Normal_resultante(
-    fck, b_i, h_i, Asi, di, curvatura, x, beta, N_sd, fy, n_xi
+    fck,
+    epsilon_c2,
+    exponente_n,
+    coef_fragilidade,
+    b_i,
+    h_i,
+    Asi,
+    di,
+    curvatura,
+    x,
+    beta,
+    N_sd,
+    fy,
+    n_xi,
 ):
     """
     fck: Tensão característica do concreto. (kN/cm²).
@@ -155,7 +145,18 @@ def calcula_Normal_resultante(
     Rs = 0.0
     for i in range(len(di)):
         Rs += Asi[i] * calcula_sigma_aco(fy, calcula_epsilon_s(di[i], curvatura, x))
-    N_cd, _ = calcula_centroide_Normal_concreto(fck, b_i, h_i, curvatura, x, beta, n_xi)
+    N_cd, _ = calcula_centroide_Normal_concreto(
+        fck,
+        epsilon_c2,
+        exponente_n,
+        coef_fragilidade,
+        b_i,
+        h_i,
+        curvatura,
+        x,
+        beta,
+        n_xi,
+    )
     return N_cd + Rs - N_sd
 
 
@@ -186,7 +187,20 @@ def calcula_centroide_b_i_h_i(b_i, h_i):
 
 @jit(nopython=True)
 def calcula_Momento_resultante(
-    fck, b_i, h_i, Asi, di, curvatura, x, beta, M_sd, fy, n_xi
+    fck,
+    epsilon_c2,
+    exponente_n,
+    coef_fragilidade,
+    b_i,
+    h_i,
+    Asi,
+    di,
+    curvatura,
+    x,
+    beta,
+    M_sd,
+    fy,
+    n_xi,
 ):
     """
     fck: Tensão característica do concreto. (kN/cm²).
@@ -201,13 +215,25 @@ def calcula_Momento_resultante(
             * (centroide_secao - di[i])
         )
     N_cd, centroide_N_cd = calcula_centroide_Normal_concreto(
-        fck, b_i, h_i, curvatura, x, beta, n_xi
+        fck,
+        epsilon_c2,
+        exponente_n,
+        coef_fragilidade,
+        b_i,
+        h_i,
+        curvatura,
+        x,
+        beta,
+        n_xi,
     )
     return N_cd * (centroide_secao - centroide_N_cd) + Ms - M_sd
 
 
 def calcula_linha_neutra(
     fck,
+    epsilon_c2,
+    exponente_n,
+    coef_fragilidade,
     b_i,
     h_i,
     Asi,
@@ -232,10 +258,36 @@ def calcula_linha_neutra(
     if dx is None:
         dx = h_secao / 2.0
     N_x_min = calcula_Normal_resultante(
-        fck, b_i, h_i, Asi, di, curvatura, x_min, beta, N_sd, fy, n_xi
+        fck,
+        epsilon_c2,
+        exponente_n,
+        coef_fragilidade,
+        b_i,
+        h_i,
+        Asi,
+        di,
+        curvatura,
+        x_min,
+        beta,
+        N_sd,
+        fy,
+        n_xi,
     )
     N_x_max = calcula_Normal_resultante(
-        fck, b_i, h_i, Asi, di, curvatura, x_max, beta, N_sd, fy, n_xi
+        fck,
+        epsilon_c2,
+        exponente_n,
+        coef_fragilidade,
+        b_i,
+        h_i,
+        Asi,
+        di,
+        curvatura,
+        x_max,
+        beta,
+        N_sd,
+        fy,
+        n_xi,
     )
     N_x_med = 1.0
     i = 0
@@ -245,19 +297,58 @@ def calcula_linha_neutra(
             N_x_min = N_x_max
             x_max = x_max + dx
             N_x_max = calcula_Normal_resultante(
-                fck, b_i, h_i, Asi, di, curvatura, x_max, beta, N_sd, fy, n_xi
+                fck,
+                epsilon_c2,
+                exponente_n,
+                coef_fragilidade,
+                b_i,
+                h_i,
+                Asi,
+                di,
+                curvatura,
+                x_max,
+                beta,
+                N_sd,
+                fy,
+                n_xi,
             )
         elif N_x_min > 0.0 and N_x_max > 0.0:
             x_max = x_min
             N_x_max = N_x_min
             x_min = max(x_min - dx, x_min_absoluto)
             N_x_min = calcula_Normal_resultante(
-                fck, b_i, h_i, Asi, di, curvatura, x_min, beta, N_sd, fy, n_xi
+                fck,
+                epsilon_c2,
+                exponente_n,
+                coef_fragilidade,
+                b_i,
+                h_i,
+                Asi,
+                di,
+                curvatura,
+                x_min,
+                beta,
+                N_sd,
+                fy,
+                n_xi,
             )
         elif N_x_min < 0.0 and N_x_max > 0.0:
             x_med = (x_max + x_min) / 2.0
             N_x_med = calcula_Normal_resultante(
-                fck, b_i, h_i, Asi, di, curvatura, x_med, beta, N_sd, fy, n_xi
+                fck,
+                epsilon_c2,
+                exponente_n,
+                coef_fragilidade,
+                b_i,
+                h_i,
+                Asi,
+                di,
+                curvatura,
+                x_med,
+                beta,
+                N_sd,
+                fy,
+                n_xi,
             )
             if N_x_med > 0.0:
                 x_max = x_med
@@ -329,8 +420,10 @@ def calcula_historico_momento_curvatura(
     max_iter_linha_neutra=1000,
     tol_linha_neutra=1e-5,
 ):
-    epsilon_cu = calcula_epsilon_cu(fck)
     epsilon_c2 = calcula_epsilon_c2(fck)
+    epsilon_cu = calcula_epsilon_cu(fck)
+    exponente_n = calcula_expoente_n(fck)
+    coef_fragilidade = calcula_coef_fragilidade(fck)
     h_secao = h_i[-1]
     h_encurtamento = h_secao * ((epsilon_cu - epsilon_c2) / epsilon_cu)
     curvatura_base = epsilon_cu / h_secao
@@ -353,6 +446,9 @@ def calcula_historico_momento_curvatura(
         curvatura = theta_curvatura * curvatura_base
         x_LN = calcula_linha_neutra(
             fck,
+            epsilon_c2,
+            exponente_n,
+            coef_fragilidade,
             b_i,
             h_i,
             Asi,
@@ -370,7 +466,20 @@ def calcula_historico_momento_curvatura(
             x_min_absoluto,
         )
         M_rd = calcula_Momento_resultante(
-            fck, b_i, h_i, Asi, di, curvatura, x_LN, beta, M_sd, fy, n_xi
+            fck,
+            epsilon_c2,
+            exponente_n,
+            coef_fragilidade,
+            b_i,
+            h_i,
+            Asi,
+            di,
+            curvatura,
+            x_LN,
+            beta,
+            M_sd,
+            fy,
+            n_xi,
         )
         verificacao_ELU = calcula_verificacao_ELU(
             epsilon_cu, epsilon_c2, h_encurtamento, di, curvatura, x_LN
@@ -386,6 +495,9 @@ def calcula_historico_momento_curvatura(
         curvatura = theta_curvatura * curvatura_base
         x_LN = calcula_linha_neutra(
             fck,
+            epsilon_c2,
+            exponente_n,
+            coef_fragilidade,
             b_i,
             h_i,
             Asi,
@@ -403,7 +515,20 @@ def calcula_historico_momento_curvatura(
             x_min_absoluto,
         )
         M_rd = calcula_Momento_resultante(
-            fck, b_i, h_i, Asi, di, curvatura, x_LN, beta, M_sd, fy, n_xi
+            fck,
+            epsilon_c2,
+            exponente_n,
+            coef_fragilidade,
+            b_i,
+            h_i,
+            Asi,
+            di,
+            curvatura,
+            x_LN,
+            beta,
+            M_sd,
+            fy,
+            n_xi,
         )
         verificacao_ELU = calcula_verificacao_ELU(
             epsilon_cu, epsilon_c2, h_encurtamento, di, curvatura, x_LN
@@ -568,36 +693,3 @@ class Secao(object):
             historico_curvatura_servico, historico_momento_servico, M_rd_secante
         )
         return (M_rd_secante / valor_curvatura_secante) / 10000
-
-
-# fck = 4
-# epsilon_i = np.linspace(0, calcula_epsilon_cu(fck), 1000)
-# sigma_i = [calcula_sigma_c(fck, x) for x in epsilon_i]
-# plt.plot(epsilon_i, sigma_i, 'k')
-# plt.show()
-
-# fck = 2.5
-# b_i: np.array = np.array([50, 50], dtype="float64")
-# h_i: np.array = np.array([0, 19], dtype="float64")
-# assert all(h_i[i] <= h_i[i + 1] for i in range(len(h_i) - 1))
-# h_secao = h_i[-1]
-# epsilon_cu = calcula_epsilon_cu(fck)
-# epsilon_c2 = calcula_epsilon_c2(fck)
-# h_encurtamento = h_secao*((epsilon_cu-epsilon_c2)/epsilon_cu)
-# curvatura_base = epsilon_cu/h_secao
-# theta_curvatura = 1.0
-# curvatura = theta_curvatura*curvatura_base
-# x = 5.35
-# print(calcula_centroide_Normal_concreto(fck, b_i, h_i, curvatura, x, 0.85, 400))
-
-# As = 37.7 / 2
-# cobrimento = 3.0
-# a = cobrimento + 2 / 2 + 0.63
-# di = np.array([a, h_secao - a], dtype="float64")
-# Asi = np.array([As for _ in range(len(di))], dtype="float64")
-# x_LN = calcula_linha_neutra(fck, b_i, h_i, Asi, di, curvatura, 0.85, 0.0, 50, 400)
-# print(x_LN, curvatura)
-# print(calcula_centroide_Normal_concreto(fck, b_i, h_i, curvatura, x_LN, 0.85, 400))
-# print(calcula_Normal_resultante(fck, b_i, h_i, Asi, di, curvatura, x_LN, 0.85, 0, 50, 400))
-# print(calcula_Momento_resultante(fck, b_i, h_i, Asi, di, curvatura, x_LN, 0.85, 0, 50, 400))
-# print(calcula_deformacoes_verificacao(h_encurtamento, di, curvatura, x_LN))
