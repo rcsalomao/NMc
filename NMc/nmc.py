@@ -198,7 +198,6 @@ def calcula_Momento_resultante(
     curvatura,
     x,
     beta,
-    M_sd,
     fy,
     n_xi,
 ):
@@ -226,7 +225,7 @@ def calcula_Momento_resultante(
         beta,
         n_xi,
     )
-    return N_cd * (centroide_secao - centroide_N_cd) + Ms - M_sd
+    return N_cd * (centroide_secao - centroide_N_cd) + Ms
 
 
 def calcula_linha_neutra(
@@ -408,7 +407,6 @@ def calcula_historico_momento_curvatura(
     di,
     ELU=True,
     N_sd=0.0,
-    M_sd=0.0,
     fy=50.0,
     n_xi=400,
     x_min=None,
@@ -440,7 +438,6 @@ def calcula_historico_momento_curvatura(
     else:
         beta = 1.1
         N_sd /= 1.1
-        M_sd /= 1.1
     while verificacao_ELU:
         theta_curvatura += dtheta_curvatura
         curvatura = theta_curvatura * curvatura_base
@@ -477,7 +474,6 @@ def calcula_historico_momento_curvatura(
             curvatura,
             x_LN,
             beta,
-            M_sd,
             fy,
             n_xi,
         )
@@ -526,7 +522,6 @@ def calcula_historico_momento_curvatura(
             curvatura,
             x_LN,
             beta,
-            M_sd,
             fy,
             n_xi,
         )
@@ -619,7 +614,7 @@ class NMc(object):
         self.max_iter_linha_neutra = max_iter_linha_neutra
         self.tol_linha_neutra = tol_linha_neutra
 
-    def calc_curva_NMc(self, secao: Secao, ELU: bool, N_sd: float = 0, M_sd: float = 0):
+    def calc_curva_NMc(self, secao: Secao, ELU: bool, N_sd: float = 0):
         return calcula_historico_momento_curvatura(
             secao.concreto.fck,
             secao.b_i,
@@ -628,7 +623,6 @@ class NMc(object):
             secao.d_i,
             ELU,
             N_sd,
-            M_sd,
             secao.aco.fy,
             self.n_xi,
             self.x_min,
@@ -676,17 +670,17 @@ class Secao(object):
             h_i[i] <= h_i[i + 1] for i in range(len(h_i) - 1)
         ), "As profundidades informadas devem estar obrigatoriamente em ordem crescente"
 
-    def calc_M_rd(self, N_sd: float = 0, M_sd: float = 0):
+    def calc_M_rd(self, N_sd: float = 0):
         assert self.nmc is not None
         historico_curvatura, historico_momento = self.nmc.calc_curva_NMc(
-            self, True, N_sd, M_sd
+            self, True, N_sd
         )
         return historico_momento[-1]
 
-    def calc_EI_secante(self, N_sd: float = 0, M_sd: float = 0):
-        M_rd = self.calc_M_rd(N_sd, M_sd)
+    def calc_EI_secante(self, N_sd: float = 0):
+        M_rd = self.calc_M_rd(N_sd)
         historico_curvatura_servico, historico_momento_servico = (
-            self.nmc.calc_curva_NMc(self, False, N_sd, M_sd)
+            self.nmc.calc_curva_NMc(self, False, N_sd)
         )
         M_rd_secante = M_rd / 1.1
         valor_curvatura_secante = interpola_sequencia_x(
